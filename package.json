@@ -5,6 +5,7 @@
 	"description": "Load, run, and edit shell scripts in a Notebook-like experience.",
 	"version": "0.0.1",
 	"license": "MIT",
+	"homepage": "https://github.com/TylerLeonhardt/shell-runner-notebooks",
 	"engines": {
 		"vscode": "^1.46.0"
 	},

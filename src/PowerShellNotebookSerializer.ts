@@ -1,0 +1,242 @@
+import * as vscode from 'vscode';
+
+interface IPowerShellNotebookCellMetadata {
+    commentType: CommentType;
+    openBlockCommentOnOwnLine?: boolean;
+    closeBlockCommentOnOwnLine?: boolean;
+}
+
+enum CommentType {
+    Disabled = "Disabled",
+    BlockComment = "BlockComment",
+    LineComment = "LineComment",
+}
+
+function CreateCell(cellKind: vscode.NotebookCellKind, source: string[], metadata: IPowerShellNotebookCellMetadata): vscode.NotebookCellData {
+	const meta = new vscode.NotebookCellMetadata();
+	return new vscode.NotebookCellData(
+		cellKind,
+		source.join('\n'),
+		cellKind === vscode.NotebookCellKind.Markup ? "markdown" : "powershell",
+		[],
+		meta.with(metadata));
+}
+
+export class PowerShellNotebookSerializer implements vscode.NotebookSerializer {
+    static type: string = 'pwshnb';
+
+    deserializeNotebook(data: Uint8Array): vscode.NotebookData {
+        const cells: vscode.NotebookCellData[] = [];
+        const str = Buffer.from(data).toString();
+
+        let lines: string[];
+        // store the line ending in the metadata of the document
+        // so that we honor the line ending of the original file
+        // on save.
+        let lineEnding: string;
+        if (str.indexOf('\r\n') !== -1) {
+            lines = str.split(/\r\n/g);
+            lineEnding = '\r\n';
+        } else {
+            lines = str.split(/\n/g);
+            lineEnding = '\n';
+        }
+
+        let currentCellSource: string[] = [];
+        let cellKind: vscode.NotebookCellKind | undefined;
+        let insideBlockComment: boolean = false;
+
+
+        // This dictates whether the BlockComment cell was read in with content on the same
+        // line as the opening <#. This is so we can preserve the format of the backing file on save.
+        let openBlockCommentOnOwnLine: boolean = false;
+
+        // Iterate through all lines in a document (aka ps1 file) and group the lines
+        // into cells (markdown or code) that will be rendered in Notebook mode.
+        // tslint:disable-next-line: prefer-for-of
+        for (let i = 0; i < lines.length; i++) {
+            // Handle block comments
+            if (insideBlockComment) {
+                if (lines[i].endsWith("#>")) {
+                    // Get the content of the current line without #>
+                    const currentLine = lines[i]
+                        .substring(0, lines[i].length - 2)
+                        .trimRight();
+
+                    // This dictates whether the BlockComment cell was read in with content on the same
+                    // line as the closing #>. This is so we can preserve the format of the backing file
+                    // on save.
+                    let closeBlockCommentOnOwnLine: boolean = true;
+                    if (currentLine) {
+                        closeBlockCommentOnOwnLine = false;
+                        currentCellSource.push(currentLine);
+                    }
+
+                    // We've reached the end of a block comment,
+                    // push a markdown cell.
+                    insideBlockComment = false;
+
+                    cells.push(CreateCell(
+                        vscode.NotebookCellKind.Markup,
+                        currentCellSource,
+                        {
+                            commentType: CommentType.BlockComment,
+                            openBlockCommentOnOwnLine,
+                            closeBlockCommentOnOwnLine
+                        }
+                    ));
+
+                    currentCellSource = [];
+                    cellKind = undefined;
+                    continue;
+                }
+
+                // If we're still in a block comment, push the line and continue.
+                currentCellSource.push(lines[i]);
+                continue;
+            } else if (lines[i].startsWith("<#")) {
+                // If we found the start of a block comment,
+                // insert what we saw leading up to this.
+                // If cellKind is null/undefined, that means we
+                // are starting the file with a BlockComment.
+                if (cellKind) {
+                    cells.push(CreateCell(
+                        cellKind,
+                        currentCellSource,
+                        {
+                            commentType: cellKind === vscode.NotebookCellKind.Markup ? CommentType.LineComment : CommentType.Disabled,
+                        }
+                    ));
+                }
+
+                // We're starting a new Markdown cell.
+                cellKind = vscode.NotebookCellKind.Markup;
+                insideBlockComment = true;
+
+                // Get the content of the current line without `<#`
+                const currentLine = lines[i]
+                    .substring(2, lines[i].length)
+                    .trimLeft();
+
+                // If we have additional text on the line with the `<#`
+                // We need to keep track of what comes after it.
+                if (currentLine) {
+                    // If both the `<#` and the `#>` are on the same line
+                    // we want to push a markdown cell.
+                    if (currentLine.endsWith("#>")) {
+                        // Get the content of the current line without `#>`
+                        const newCurrentLine = currentLine
+                            .substring(0, currentLine.length - 2)
+                            .trimRight();
+
+                        cells.push(CreateCell(
+                            vscode.NotebookCellKind.Markup,
+                            [ newCurrentLine ],
+                            {
+                                commentType: CommentType.BlockComment,
+                                openBlockCommentOnOwnLine: false,
+                                closeBlockCommentOnOwnLine: false,
+                            }
+                        ));
+
+                        // Reset
+                        currentCellSource = [];
+                        cellKind = undefined;
+                        insideBlockComment = false;
+                        continue;
+                    }
+
+                    openBlockCommentOnOwnLine = false;
+                    currentCellSource = [ currentLine ];
+                } else {
+                    openBlockCommentOnOwnLine = true;
+                    currentCellSource = [];
+                }
+
+                continue;
+            }
+
+            // Handle everything else (regular comments and code)
+            // If a line starts with # it's a comment
+            const kind: vscode.NotebookCellKind = lines[i].startsWith("#") ? vscode.NotebookCellKind.Markup : vscode.NotebookCellKind.Code;
+
+            // If this line is a continuation of the previous cell type, then add this line to the current cell source.
+            if (kind === cellKind) {
+                currentCellSource.push(kind === vscode.NotebookCellKind.Markup && !insideBlockComment ? lines[i].replace(/^\#\s*/, "") : lines[i]);
+            } else {
+                // If cellKind has a value, then we can add the cell we've just computed.
+                if (cellKind) {
+                    cells.push(CreateCell(
+                        cellKind,
+                        currentCellSource,
+                        {
+                            commentType: cellKind === vscode.NotebookCellKind.Markup ? CommentType.LineComment : CommentType.Disabled,
+                        }
+                    ));
+                }
+
+                // set initial new cell state
+                currentCellSource = [];
+                cellKind = kind;
+                currentCellSource.push(kind === vscode.NotebookCellKind.Markup ? lines[i].replace(/^\#\s*/, "") : lines[i]);
+            }
+        }
+
+        // If we have some leftover lines that have not been added (for example,
+        // when there is only the _start_ of a block comment but not an _end_.)
+        // add the appropriate cell.
+        if (currentCellSource.length) {
+            cells.push(CreateCell(
+                cellKind!,
+                currentCellSource,
+                {
+                    commentType: cellKind === vscode.NotebookCellKind.Markup ? CommentType.LineComment : CommentType.Disabled,
+                }
+            ));
+        }
+
+        const metadata = new vscode.NotebookDocumentMetadata();
+        return new vscode.NotebookData(cells, metadata.with({
+            custom: {
+                lineEnding
+            }
+        }));
+    }
+
+    serializeNotebook(data: vscode.NotebookData): Uint8Array {
+        const retArr: string[] = [];
+        for (const cell of data.cells) {
+            if (cell.kind === vscode.NotebookCellKind.Code) {
+                retArr.push(...cell.value.split(/\r\n|\n/));
+            } else {
+                // First honor the comment type of the cell if it already has one.
+                // If not, use the user setting.
+                const commentKind: CommentType = cell.metadata?.custom?.commentType || CommentType.LineComment;
+
+                if (commentKind === CommentType.BlockComment) {
+                    const openBlockCommentOnOwnLine: boolean = cell.metadata?.custom?.openBlockCommentOnOwnLine;
+                    const closeBlockCommentOnOwnLine: boolean = cell.metadata?.custom?.closeBlockCommentOnOwnLine;
+                    const text = cell.value.split(/\r\n|\n/);
+                    if (openBlockCommentOnOwnLine) {
+                        retArr.push("<#");
+                    } else {
+                        text[0] = `<# ${text[0]}`;
+                    }
+
+                    if (!closeBlockCommentOnOwnLine) {
+                        text[text.length - 1] += " #>";
+                        retArr.push(...text);
+                    } else {
+                        retArr.push(...text);
+                        retArr.push("#>");
+                    }
+                } else {
+                    retArr.push(...cell.value.split(/\r\n|\n/).map((line) => `# ${line}`));
+                }
+            }
+        }
+
+        const eol: string = data.metadata.custom.lineEnding;
+        return Buffer.from(retArr.join(eol));
+    }
+}

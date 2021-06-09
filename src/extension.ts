@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import { PowerShellNotebookSerializer } from './PowerShellNotebookSerializer';
 import { ShNotebookSerializer } from './ShNotebookSerializer';
+import { NotebookSerializer } from './NotebookSerializer';
 
 function getExecuteHandler(controller: vscode.NotebookController) {
 	return async (cells: vscode.NotebookCell[]) => {
@@ -23,14 +24,19 @@ function getExecuteHandler(controller: vscode.NotebookController) {
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-	context.subscriptions.push(vscode.notebooks.registerNotebookSerializer(
+	context.subscriptions.push(vscode.workspace.registerNotebookSerializer(
 		PowerShellNotebookSerializer.type,
 		new PowerShellNotebookSerializer(),
 		{ transientOutputs: true }));
 
-	context.subscriptions.push(vscode.notebooks.registerNotebookSerializer(
+	context.subscriptions.push(vscode.workspace.registerNotebookSerializer(
 		ShNotebookSerializer.type,
 		new ShNotebookSerializer(),
+		{ transientOutputs: true }));
+	
+	context.subscriptions.push(vscode.workspace.registerNotebookSerializer(
+		NotebookSerializer.type,
+		new NotebookSerializer(),
 		{ transientOutputs: true }));
 
 	// "execute" a PowerShell cell
@@ -44,6 +50,12 @@ export function activate(context: vscode.ExtensionContext) {
 	shController.supportedLanguages = ['shellscript'];
 	shController.executeHandler = getExecuteHandler(shController);
 	context.subscriptions.push(shController);
+
+	// "execute" a cell
+	const nbController = vscode.notebooks.createNotebookController('shell-notebook-kernel', 'shell-notebook', 'Shell Notebook');
+	nbController.supportedLanguages = ['powershell', 'shellscript'];
+	nbController.executeHandler = getExecuteHandler(nbController);
+	context.subscriptions.push(nbController);
 }
 
 // this method is called when your extension is deactivated

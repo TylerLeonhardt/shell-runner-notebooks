@@ -16,9 +16,9 @@ function getExecuteHandler(controller: vscode.NotebookController) {
 			execution.start();
 			const cellContent = execution.cell.document.getText();
 			vscode.window.activeTerminal!.sendText(cellContent);
-			execution.end();
+			execution.end(undefined);
 		}
-	}
+	};
 }
 
 // this method is called when your extension is activated

@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import { NotebookCellData, NotebookCellKind, NotebookData, NotebookSerializer } from "vscode";
+
 
 interface IPowerShellNotebookCellMetadata {
     commentType: CommentType;
@@ -12,21 +13,20 @@ enum CommentType {
     LineComment = "LineComment",
 }
 
-function CreateCell(cellKind: vscode.NotebookCellKind, source: string[], metadata: IPowerShellNotebookCellMetadata): vscode.NotebookCellData {
-	const meta = new vscode.NotebookCellMetadata();
-	return new vscode.NotebookCellData(
+function createCell(cellKind: NotebookCellKind, source: string[], metadata: IPowerShellNotebookCellMetadata): NotebookCellData {
+	const cell = new NotebookCellData(
 		cellKind,
 		source.join('\n'),
-		cellKind === vscode.NotebookCellKind.Markup ? "markdown" : "powershell",
-		[],
-		meta.with(metadata));
+		cellKind === NotebookCellKind.Markup ? "markdown" : "powershell");
+    cell.metadata = metadata;
+    return cell;
 }
 
-export class PowerShellNotebookSerializer implements vscode.NotebookSerializer {
+export class PowerShellNotebookSerializer implements NotebookSerializer {
     static type: string = 'pwshnb';
 
-    deserializeNotebook(data: Uint8Array): vscode.NotebookData {
-        const cells: vscode.NotebookCellData[] = [];
+    deserializeNotebook(data: Uint8Array): NotebookData {
+        const cells: NotebookCellData[] = [];
         const str = Buffer.from(data).toString();
 
         let lines: string[];
@@ -43,7 +43,7 @@ export class PowerShellNotebookSerializer implements vscode.NotebookSerializer {
         }
 
         let currentCellSource: string[] = [];
-        let cellKind: vscode.NotebookCellKind | undefined;
+        let cellKind: NotebookCellKind | undefined;
         let insideBlockComment: boolean = false;
 
 
@@ -76,8 +76,8 @@ export class PowerShellNotebookSerializer implements vscode.NotebookSerializer {
                     // push a markdown cell.
                     insideBlockComment = false;
 
-                    cells.push(CreateCell(
-                        vscode.NotebookCellKind.Markup,
+                    cells.push(createCell(
+                        NotebookCellKind.Markup,
                         currentCellSource,
                         {
                             commentType: CommentType.BlockComment,
@@ -100,17 +100,17 @@ export class PowerShellNotebookSerializer implements vscode.NotebookSerializer {
                 // If cellKind is null/undefined, that means we
                 // are starting the file with a BlockComment.
                 if (cellKind) {
-                    cells.push(CreateCell(
+                    cells.push(createCell(
                         cellKind,
                         currentCellSource,
                         {
-                            commentType: cellKind === vscode.NotebookCellKind.Markup ? CommentType.LineComment : CommentType.Disabled,
+                            commentType: cellKind === NotebookCellKind.Markup ? CommentType.LineComment : CommentType.Disabled,
                         }
                     ));
                 }
 
                 // We're starting a new Markdown cell.
-                cellKind = vscode.NotebookCellKind.Markup;
+                cellKind = NotebookCellKind.Markup;
                 insideBlockComment = true;
 
                 // Get the content of the current line without `<#`
@@ -129,8 +129,8 @@ export class PowerShellNotebookSerializer implements vscode.NotebookSerializer {
                             .substring(0, currentLine.length - 2)
                             .trimRight();
 
-                        cells.push(CreateCell(
-                            vscode.NotebookCellKind.Markup,
+                        cells.push(createCell(
+                            NotebookCellKind.Markup,
                             [ newCurrentLine ],
                             {
                                 commentType: CommentType.BlockComment,
@@ -158,19 +158,19 @@ export class PowerShellNotebookSerializer implements vscode.NotebookSerializer {
 
             // Handle everything else (regular comments and code)
             // If a line starts with # it's a comment
-            const kind: vscode.NotebookCellKind = lines[i].startsWith("#") ? vscode.NotebookCellKind.Markup : vscode.NotebookCellKind.Code;
+            const kind: NotebookCellKind = lines[i].startsWith("#") ? NotebookCellKind.Markup : NotebookCellKind.Code;
 
             // If this line is a continuation of the previous cell type, then add this line to the current cell source.
             if (kind === cellKind) {
-                currentCellSource.push(kind === vscode.NotebookCellKind.Markup && !insideBlockComment ? lines[i].replace(/^\#\s*/, "") : lines[i]);
+                currentCellSource.push(kind === NotebookCellKind.Markup && !insideBlockComment ? lines[i].replace(/^\#\s*/, "") : lines[i]);
             } else {
                 // If cellKind has a value, then we can add the cell we've just computed.
                 if (cellKind) {
-                    cells.push(CreateCell(
+                    cells.push(createCell(
                         cellKind,
                         currentCellSource,
                         {
-                            commentType: cellKind === vscode.NotebookCellKind.Markup ? CommentType.LineComment : CommentType.Disabled,
+                            commentType: cellKind === NotebookCellKind.Markup ? CommentType.LineComment : CommentType.Disabled,
                         }
                     ));
                 }
@@ -178,7 +178,7 @@ export class PowerShellNotebookSerializer implements vscode.NotebookSerializer {
                 // set initial new cell state
                 currentCellSource = [];
                 cellKind = kind;
-                currentCellSource.push(kind === vscode.NotebookCellKind.Markup ? lines[i].replace(/^\#\s*/, "") : lines[i]);
+                currentCellSource.push(kind === NotebookCellKind.Markup ? lines[i].replace(/^\#\s*/, "") : lines[i]);
             }
         }
 
@@ -186,27 +186,28 @@ export class PowerShellNotebookSerializer implements vscode.NotebookSerializer {
         // when there is only the _start_ of a block comment but not an _end_.)
         // add the appropriate cell.
         if (currentCellSource.length) {
-            cells.push(CreateCell(
+            cells.push(createCell(
                 cellKind!,
                 currentCellSource,
                 {
-                    commentType: cellKind === vscode.NotebookCellKind.Markup ? CommentType.LineComment : CommentType.Disabled,
+                    commentType: cellKind === NotebookCellKind.Markup ? CommentType.LineComment : CommentType.Disabled,
                 }
             ));
         }
 
-        const metadata = new vscode.NotebookDocumentMetadata();
-        return new vscode.NotebookData(cells, metadata.with({
+        const notebookData = new NotebookData(cells);
+        notebookData.metadata = {
             custom: {
                 lineEnding
             }
-        }));
+        };
+        return notebookData;
     }
 
-    serializeNotebook(data: vscode.NotebookData): Uint8Array {
+    serializeNotebook(data: NotebookData): Uint8Array {
         const retArr: string[] = [];
         for (const cell of data.cells) {
-            if (cell.kind === vscode.NotebookCellKind.Code) {
+            if (cell.kind === NotebookCellKind.Code) {
                 retArr.push(...cell.value.split(/\r\n|\n/));
             } else {
                 // First honor the comment type of the cell if it already has one.
@@ -236,7 +237,7 @@ export class PowerShellNotebookSerializer implements vscode.NotebookSerializer {
             }
         }
 
-        const eol: string = data.metadata.custom.lineEnding;
+        const eol: string = data.metadata?.custom.lineEnding;
         return Buffer.from(retArr.join(eol));
     }
 }

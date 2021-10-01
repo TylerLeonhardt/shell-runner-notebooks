@@ -3,14 +3,14 @@
 	"publisher": "tylerleonhardt",
 	"displayName": "Shell Runner Notebooks",
 	"description": "Load, run, and edit shell scripts in a Notebook-like experience.",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"license": "MIT",
 	"homepage": "https://github.com/TylerLeonhardt/shell-runner-notebooks",
 	"repository": {
 		"url": "https://github.com/TylerLeonhardt/shell-runner-notebooks"
 	},
 	"engines": {
-		"vscode": "^1.46.0"
+		"vscode": "^1.60.0"
 	},
 	"categories": [
 		"Notebooks",
@@ -71,18 +71,19 @@
 		"test": "node ./out/test/runTest.js"
 	},
 	"devDependencies": {
-		"@types/glob": "^7.1.3",
-		"@types/mocha": "^8.0.4",
+		"@types/glob": "^7.1.4",
+		"@types/mocha": "^9.0.0",
 		"@types/node": "^12.20.13",
-		"@typescript-eslint/eslint-plugin": "^4.9.0",
-		"@typescript-eslint/parser": "^4.9.0",
-		"eslint": "^7.15.0",
-		"glob": "^7.1.6",
-		"mocha": "^8.1.3",
-		"ts-loader": "^8.0.11",
-		"typescript": "^4.1.2",
-		"vscode-test": "^1.4.1",
-		"webpack": "^5.10.0",
-		"webpack-cli": "^4.2.0"
+		"@types/vscode": "1.60.0",
+		"@typescript-eslint/eslint-plugin": "^4.32.0",
+		"@typescript-eslint/parser": "^4.32.0",
+		"eslint": "^7.32.0",
+		"glob": "^7.2.0",
+		"mocha": "^9.1.2",
+		"ts-loader": "^9.2.6",
+		"typescript": "^4.4.3",
+		"vscode-test": "^1.6.1",
+		"webpack": "^5.56.0",
+		"webpack-cli": "^4.8.0"
 	}
 }

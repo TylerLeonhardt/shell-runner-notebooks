@@ -2,10 +2,12 @@
 
 Parses scripts in popular shell languages and allows you to run the cells in the active terminal below.
 
-Comment blocks get rendered as markdown.
-Code blocks get rendered as code blocks.
+- Comment blocks get rendered as markdown.
+- Code blocks get rendered as code blocks.
 
-Currently supported shells:
+## Usage
+
+Create a file whose filename ends with the following
 
 * PowerShell (`*.Notebook.ps1`)
 * Bash (`*.Notebook.sh` or `*.Notebook.bash`)
